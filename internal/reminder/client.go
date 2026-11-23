@@ -20,6 +20,14 @@ type Client struct {
 }
 
 func Connect() (*Client, error) {
+	return connect(true)
+}
+
+func ConnectRunning() (*Client, error) {
+	return connect(false)
+}
+
+func connect(start bool) (*Client, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return nil, err
@@ -27,6 +35,10 @@ func Connect() (*Client, error) {
 	client := &Client{conn: conn}
 	if _, err = client.Status(); err == nil {
 		return client, nil
+	}
+	if !start {
+		conn.Close()
+		return nil, err
 	}
 	if err = launch("eyeloveu-daemon"); err == nil {
 		deadline := time.Now().Add(1500 * time.Millisecond)

@@ -43,6 +43,8 @@ type Status struct {
 	RestSeconds    int
 	PauseSeconds   int
 	Away           bool
+	EyePending     bool
+	WaterDeferred  bool
 	SmartAvailable bool
 	Autostart      bool
 }
@@ -52,6 +54,7 @@ type due struct{ eye, water bool }
 type schedule struct {
 	config                                           Config
 	eyeAt, waterAt, restUntil, pauseUntil, awaySince time.Time
+	eyePending, waterIdle                            bool
 }
 
 func newSchedule(config Config, now time.Time) schedule {
@@ -73,11 +76,15 @@ func (s *schedule) configure(config Config, now time.Time) {
 		s.waterAt = now.Add(config.waterInterval())
 	}
 	s.config = config
+	if !config.EyeEnabled {
+		s.eyePending = false
+	}
 }
 
 func (s *schedule) setAway(away bool, now time.Time) {
 	if away && s.awaySince.IsZero() {
 		s.awaySince = now
+		s.eyePending = false
 	}
 	if !away && !s.awaySince.IsZero() {
 		elapsed := now.Sub(s.awaySince)
@@ -93,24 +100,20 @@ func (s *schedule) setAway(away bool, now time.Time) {
 	}
 }
 
-func (s *schedule) markIdle(now time.Time, threshold time.Duration) {
-	// Idle may have started before this timer or during an explicit break.
-	start := s.eyeAt.Add(-s.config.eyeInterval())
-	since := now.Add(-threshold)
-	if start.After(since) {
-		since = start
-		if since.After(now) {
-			since = now
-		}
-	}
-	s.setAway(true, since)
-}
-
 func (s *schedule) startRest(now time.Time) {
+	s.eyePending = false
 	if !s.restUntil.After(now) {
 		s.restUntil = now.Add(s.config.breakLength())
 		s.eyeAt = s.restUntil.Add(s.config.eyeInterval())
 	}
+}
+
+func (s *schedule) snoozeEye(now time.Time) {
+	if !s.eyePending {
+		return
+	}
+	s.eyePending = false
+	s.eyeAt = now.Add(5 * time.Minute)
 }
 
 func (s *schedule) finishRest(now time.Time) {
@@ -144,14 +147,16 @@ func (s *schedule) takeDue(now time.Time) due {
 		return due{}
 	}
 	eyeReady := s.config.EyeEnabled && !s.eyeAt.After(now)
-	waterReady := s.config.WaterEnabled && !s.waterAt.After(now)
+	waterEnabled := s.config.WaterEnabled && !s.waterIdle
+	waterReady := waterEnabled && !s.waterAt.After(now)
 	if !eyeReady && !waterReady {
 		return due{}
 	}
 	// Coalesce nearly simultaneous reminders even if their timers were set separately.
 	cutoff := now.Add(time.Second)
-	result := due{s.config.EyeEnabled && !s.eyeAt.After(cutoff), s.config.WaterEnabled && !s.waterAt.After(cutoff)}
+	result := due{s.config.EyeEnabled && !s.eyeAt.After(cutoff), waterEnabled && !s.waterAt.After(cutoff)}
 	if result.eye {
+		s.eyePending = true
 		s.eyeAt = now.Add(s.config.eyeInterval())
 	}
 	if result.water {
@@ -171,7 +176,7 @@ func (s *schedule) next(now time.Time) time.Time {
 	if s.config.EyeEnabled {
 		next = s.eyeAt
 	}
-	if s.config.WaterEnabled && (next.IsZero() || s.waterAt.Before(next)) {
+	if s.config.WaterEnabled && !s.waterIdle && (next.IsZero() || s.waterAt.Before(next)) {
 		next = s.waterAt
 	}
 	return next
@@ -193,5 +198,6 @@ func (s *schedule) snapshot(now time.Time) Status {
 		Config: s.config, EyeSeconds: remaining(s.eyeAt, eyeNow),
 		WaterSeconds: remaining(s.waterAt, now), RestSeconds: remaining(s.restUntil, now),
 		PauseSeconds: remaining(s.pauseUntil, now), Away: !s.awaySince.IsZero(),
+		EyePending: s.eyePending, WaterDeferred: s.waterIdle && !s.waterAt.After(now),
 	}
 }

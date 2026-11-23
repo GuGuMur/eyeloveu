@@ -42,3 +42,7 @@
 .rest-clock {
   font-feature-settings: "tnum";
 }
+
+.break-prompt image {
+  color: @accent_color;
+}

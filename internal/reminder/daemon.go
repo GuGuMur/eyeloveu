@@ -114,6 +114,9 @@ func (d *daemon) loop(ctx context.Context, signals <-chan *dbus.Signal) {
 	for d.running {
 		now := time.Now()
 		if due := d.schedule.takeDue(now); due.eye || due.water {
+			if due.eye {
+				openBreakPrompt()
+			}
 			if err := d.notify(due, false); err != nil {
 				log.Printf("发送提醒: %v", err)
 			}
@@ -160,11 +163,9 @@ func (d *daemon) setIdle(idle bool) {
 }
 
 func (d *daemon) updatePresence() {
-	now := time.Now()
-	if d.schedule.config.Smart && d.idle && d.schedule.awaySince.IsZero() {
-		d.schedule.markIdle(now, idleThreshold)
-	}
-	d.schedule.setAway(d.locked || d.sleeping || d.schedule.config.Smart && d.idle, now)
+	// Reading and watching videos can leave the keyboard and mouse idle.
+	d.schedule.waterIdle = d.schedule.config.Smart && d.idle
+	d.schedule.setAway(d.locked || d.sleeping, time.Now())
 }
 
 func (d *daemon) handleSignal(signal *dbus.Signal) {
@@ -291,10 +292,14 @@ func (d *daemon) handleNotificationAction(id uint32, action string) {
 		if err := d.act(action); err != nil {
 			log.Print(err)
 		} else if action == "rest" {
-			if err := launch("eyeloveu"); err != nil {
-				log.Print(err)
-			}
+			openBreakPrompt()
 		}
+	}
+}
+
+func openBreakPrompt() {
+	if err := launch("eyeloveu", "--break-reminder"); err != nil {
+		log.Printf("打开休息提醒窗口: %v", err)
 	}
 }
 
@@ -307,9 +312,7 @@ func (d *daemon) act(action string) error {
 	case "finish-rest":
 		d.schedule.finishRest(now)
 	case "eye-later":
-		if !d.schedule.restUntil.After(now) {
-			d.schedule.eyeAt = now.Add(5 * time.Minute)
-		}
+		d.schedule.snoozeEye(now)
 		d.withdraw(due{eye: true})
 	case "water-later":
 		d.schedule.waterAt = now.Add(5 * time.Minute)
@@ -319,6 +322,7 @@ func (d *daemon) act(action string) error {
 		d.withdraw(due{water: true})
 	case "pause":
 		d.schedule.pauseUntil = now.Add(time.Hour)
+		d.schedule.eyePending = false
 		d.closeNotifications()
 	case "resume":
 		d.schedule.resume(now)

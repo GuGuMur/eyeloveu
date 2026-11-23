@@ -21,7 +21,7 @@ func (d *dashboard) settings() *settingsForm {
 
 	reminders := adw.NewPreferencesGroup()
 	reminders.SetTitle("提醒频率")
-	form.eye, _ = switchRow(reminders, "屏幕休息", "")
+	form.eye, _ = switchRow(reminders, "屏幕休息", "到点弹出休息窗口并发送通知")
 	form.eyeMinutes = numberRow(reminders, "屏幕休息间隔（分钟）", 1, 180)
 	form.breakSeconds = numberRow(reminders, "休息时长（秒）", 20, 300)
 	form.water, _ = switchRow(reminders, "喝水提醒", "")
@@ -30,7 +30,7 @@ func (d *dashboard) settings() *settingsForm {
 
 	behavior := adw.NewPreferencesGroup()
 	behavior.SetTitle("后台行为")
-	form.smart, form.smartRow = switchRow(behavior, "按屏幕活动计时", "长时间离开后重新计算屏幕休息间隔")
+	form.smart, form.smartRow = switchRow(behavior, "无操作时延后喝水", "长时间没有键鼠操作时，等你回来再提醒喝水")
 	form.login, _ = switchRow(behavior, "登录时启动", "在后台运行，打开窗口可调整提醒")
 	form.box.Append(&behavior.Widget)
 
@@ -82,7 +82,7 @@ func (f *settingsForm) load(state reminder.Status) {
 	f.smart.SetActive(state.Config.Smart)
 	f.smart.SetSensitive(state.SmartAvailable)
 	if !state.SmartAvailable {
-		f.smartRow.SetSubtitle("当前桌面未提供空闲检测，使用固定间隔")
+		f.smartRow.SetSubtitle("当前桌面未提供空闲检测，喝水按固定间隔提醒")
 	}
 	f.login.SetActive(state.Autostart)
 }

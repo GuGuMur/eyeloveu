@@ -8,7 +8,6 @@ import (
 	"eyeloveu/internal/reminder"
 
 	"github.com/jwijenbergh/puregotk/v4/adw"
-	"github.com/jwijenbergh/puregotk/v4/gdk"
 	"github.com/jwijenbergh/puregotk/v4/glib"
 	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
@@ -27,14 +26,10 @@ type dashboard struct {
 	clientActions     []*gtk.Widget
 }
 
-func showWindow(app *gtk.Application) func() {
+func showWindow(app *gtk.Application, closed func()) (*adw.ApplicationWindow, func()) {
 	win := adw.NewApplicationWindow(app)
 	win.SetTitle("EyeLoveU")
 	win.SetDefaultSize(610, 510)
-	provider := gtk.NewCssProvider()
-	provider.LoadFromData(stylesheet, len(stylesheet))
-	gtk.StyleContextAddProviderForDisplay(gdk.DisplayGetDefault(), provider, 600)
-
 	d := &dashboard{win: win, overlay: adw.NewToastOverlay()}
 	root := gtk.NewBox(gtk.OrientationVerticalValue, 0)
 	header := adw.NewHeaderBar()
@@ -147,8 +142,6 @@ func showWindow(app *gtk.Application) func() {
 		}
 	}
 	settingsToggle.ConnectClicked(&tab)
-	win.Present()
-
 	tick := glib.SourceFunc(func(uintptr) bool {
 		if connecting {
 			connecting = false
@@ -187,10 +180,11 @@ func showWindow(app *gtk.Application) func() {
 		if d.client != nil {
 			d.client.Close()
 		}
+		closed()
 		return false
 	}
 	win.ConnectCloseRequest(&closeRequest)
-	return showSettings
+	return win, showSettings
 }
 
 func page() *gtk.Box {
@@ -280,15 +274,17 @@ func (d *dashboard) refresh() bool {
 		eyeStatus, waterStatus = "提醒已暂停", "提醒已暂停"
 		d.pause.SetLabel("恢复提醒")
 	case state.Away:
-		d.status.SetLabel("离开期间暂停提醒")
+		d.status.SetLabel("锁屏或休眠期间暂停提醒")
 		eyeStatus, waterStatus = "计时暂停", "回来后提醒"
 		d.pause.SetLabel("暂停 1 小时")
 	default:
 		d.pause.SetLabel("暂停 1 小时")
-		if state.Config.Smart && state.SmartAvailable {
-			d.status.SetLabel("提醒运行中 · 按屏幕活动计时")
-		} else {
-			d.status.SetLabel("提醒运行中 · 固定间隔")
+		d.status.SetLabel("提醒运行中 · 屏幕休息按固定间隔")
+		if state.EyePending {
+			eyeStatus = "该休息了"
+		}
+		if state.WaterDeferred {
+			waterStatus = "恢复操作后提醒"
 		}
 	}
 	if !state.Config.EyeEnabled && !state.Config.WaterEnabled && state.PauseSeconds == 0 {

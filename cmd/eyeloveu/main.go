@@ -8,6 +8,7 @@ import (
 	"eyeloveu/internal/reminder"
 
 	"github.com/jwijenbergh/puregotk/v4/adw"
+	"github.com/jwijenbergh/puregotk/v4/gdk"
 	"github.com/jwijenbergh/puregotk/v4/gio"
 	"github.com/jwijenbergh/puregotk/v4/glib"
 	"github.com/jwijenbergh/puregotk/v4/gtk"
@@ -21,19 +22,36 @@ func main() {
 		os.Exit(1)
 	}
 	app.AddMainOption("settings", 0, glib.GOptionFlagNoneValue, glib.GOptionArgNoneValue, "打开提醒设置", "")
+	app.AddMainOption("break-reminder", 0, glib.GOptionFlagNoneValue, glib.GOptionArgNoneValue, "打开休息提醒窗口", "")
+	startup := func(gio.Application) {
+		provider := gtk.NewCssProvider()
+		provider.LoadFromData(stylesheet, len(stylesheet))
+		gtk.StyleContextAddProviderForDisplay(gdk.DisplayGetDefault(), provider, 600)
+	}
+	app.ConnectStartup(&startup)
+	var home, prompt *adw.ApplicationWindow
 	var openSettings func()
 	present := func(gio.Application) {
-		if active := app.GetActiveWindow(); active == nil || active.Ptr == 0 {
-			openSettings = showWindow(&app.Application)
-		} else {
-			active.Present()
+		if home == nil {
+			home, openSettings = showWindow(&app.Application, func() { home = nil })
 		}
+		home.Present()
 	}
 	commandLine := func(application gio.Application, pointer uintptr) int32 {
 		var command gio.ApplicationCommandLine
 		command.SetGoPointer(pointer)
+		options := command.GetOptionsDict()
+		if options.Contains("break-reminder") {
+			if prompt == nil {
+				prompt = showBreakPrompt(&app.Application, func() { prompt = nil })
+			}
+			if prompt != nil {
+				prompt.Present()
+			}
+			return 0
+		}
 		present(application)
-		if command.GetOptionsDict().Contains("settings") {
+		if options.Contains("settings") {
 			openSettings()
 		}
 		return 0
