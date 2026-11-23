@@ -27,7 +27,7 @@ type dashboard struct {
 	clientActions     []*gtk.Widget
 }
 
-func showWindow(app *gtk.Application) {
+func showWindow(app *gtk.Application) func() {
 	win := adw.NewApplicationWindow(app)
 	win.SetTitle("EyeLoveU")
 	win.SetDefaultSize(610, 510)
@@ -113,15 +113,19 @@ func showWindow(app *gtk.Application) {
 	retry.SetHalign(gtk.AlignStartValue)
 	home.Append(&retry.Widget)
 	var settings *settingsForm
+	settingsRequested := false
 	showHome := func() {
 		stack.SetVisibleChildName("home")
 		settingsToggle.SetIconName("emblem-system-symbolic")
 		settingsToggle.SetTooltipText("提醒设置")
 		settings.save.SetVisible(false)
 	}
-	tab := func(gtk.Button) {
+	showSettings := func() {
+		if d.client == nil {
+			settingsRequested = true
+			return
+		}
 		if stack.GetVisibleChildName() == "settings" {
-			showHome()
 			return
 		}
 		state, err := d.client.Status()
@@ -134,6 +138,13 @@ func showWindow(app *gtk.Application) {
 		settingsToggle.SetIconName("go-previous-symbolic")
 		settingsToggle.SetTooltipText("返回")
 		settings.save.SetVisible(true)
+	}
+	tab := func(gtk.Button) {
+		if stack.GetVisibleChildName() == "settings" {
+			showHome()
+		} else {
+			showSettings()
+		}
 	}
 	settingsToggle.ConnectClicked(&tab)
 	win.Present()
@@ -157,6 +168,10 @@ func showWindow(app *gtk.Application) {
 				settings.save.SetVisible(false)
 				header.PackEnd(&settings.save.Widget)
 			}
+			if settingsRequested {
+				settingsRequested = false
+				showSettings()
+			}
 		}
 		if d.client != nil && !d.refresh() {
 			d.client.Close()
@@ -175,6 +190,7 @@ func showWindow(app *gtk.Application) {
 		return false
 	}
 	win.ConnectCloseRequest(&closeRequest)
+	return showSettings
 }
 
 func page() *gtk.Box {

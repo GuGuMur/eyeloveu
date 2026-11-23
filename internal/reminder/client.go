@@ -96,12 +96,12 @@ func sibling(name string) (string, error) {
 	return filepath.Join(filepath.Dir(path), name), nil
 }
 
-func launch(name string) error {
+func launch(name string, args ...string) error {
 	path, err := sibling(name)
 	if err != nil {
 		return err
 	}
-	command := exec.Command(path)
+	command := exec.Command(path, args...)
 	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := command.Start(); err != nil {
 		return err

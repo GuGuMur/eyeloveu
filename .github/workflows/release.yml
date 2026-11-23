@@ -1,22 +1,33 @@
-name: Linux CI and release
+name: Linux release
 
 on:
-  pull_request:
   push:
-    branches: ['**']
-    tags: ['v*']
+    tags: ['v[0-9]*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, such as v0.1.0
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+concurrency:
+  group: linux-release-${{ inputs.tag || github.ref_name }}
+
 jobs:
   build:
     name: Check and build
-    if: github.event_name != 'push' || !github.event.deleted
+    if: github.event_name == 'workflow_dispatch' || !github.event.deleted
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
       - uses: actions/setup-go@v6
         with:
@@ -26,16 +37,9 @@ jobs:
         run: |
           go test -race ./...
           go vet ./...
-      - name: Build application
-        if: github.ref_type != 'tag'
-        run: make build
       - name: Package Linux release
-        if: github.ref_type == 'tag'
-        env:
-          TAG: ${{ github.ref_name }}
         run: bash scripts/package-linux.sh "$TAG"
       - uses: actions/upload-artifact@v6
-        if: github.ref_type == 'tag'
         with:
           name: linux-release
           path: dist/
@@ -44,7 +48,6 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-24.04
     permissions:
@@ -60,7 +63,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
         run: |
           sha256sum -c SHA256SUMS
           options=(--verify-tag --generate-notes)

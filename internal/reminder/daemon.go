@@ -90,6 +90,8 @@ func Run(ctx context.Context) error {
 		}
 	}
 	d.refreshPresence()
+	stopTray := startTray(d.done)
+	defer stopTray()
 	d.loop(ctx, signals)
 	d.closeNotifications()
 	return nil
