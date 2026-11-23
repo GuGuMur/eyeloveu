@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=EyeLoveU
+GenericName=Screen Break Reminder
+GenericName[zh_CN]=屏幕休息提醒
+Comment=Take screen breaks and remember to drink water
+Comment[zh_CN]=定时提醒屏幕休息和喝水
+Exec=eyeloveu
+TryExec=eyeloveu
+Icon=preferences-desktop-display
+Terminal=false
+Categories=Utility;
